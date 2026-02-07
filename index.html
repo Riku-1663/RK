@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>国公立大学 総合判定シミュレーター</title>
+    <style>
+        :root { --primary: #1a2a6c; --accent: #f24e1e; --bg: #f0f2f5; --white: #ffffff; --error: #ff4d4d; }
+        body { font-family: "Helvetica Neue", Arial, sans-serif; background: var(--bg); color: #333; padding: 15px; line-height: 1.4; }
+        .container { max-width: 1050px; margin: auto; background: var(--white); padding: 20px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: var(--primary); margin-bottom: 20px; font-size: 1.4rem; border-bottom: 2px solid var(--primary); padding-bottom: 10px; }
+        
+        .selection-area { display: grid; grid-template-columns: 1fr 1.5fr; gap: 15px; margin-bottom: 20px; }
+        .card { background: #f9f9f9; padding: 15px; border-radius: 10px; border: 1px solid #eee; margin-bottom: 15px; }
+        .card-title { font-weight: bold; margin-bottom: 12px; color: var(--primary); border-left: 4px solid var(--primary); padding-left: 10px; font-size: 0.85rem; }
+        
+        .flex-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 20px; }
+        
+        /* 共通テスト入力エリア：横方向の圧縮と重なり防止 */
+        .score-inputs { 
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 12px 6px; 
+        }
+        .score-inputs div { min-width: 0; }
+        
+        label { font-size: 0.65rem; font-weight: bold; color: #555; display: block; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        input, select { padding: 6px 4px; border: 1px solid #ccc; border-radius: 5px; width: 100%; font-size: 0.85rem; box-sizing: border-box; }
+        
+        .input-error { background-color: var(--error) !important; color: white !important; font-weight: bold; border: 2px solid #b30000 !important; }
+
+        .second-inputs { display: flex; flex-direction: column; gap: 8px; }
+        .second-row { display: grid; grid-template-columns: 1.2fr 1fr; align-items: center; gap: 8px; }
+
+        .detail-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 10px; background: #eef1f4; padding: 8px; border-radius: 8px; }
+        .detail-item { background: white; padding: 4px 2px; border-radius: 4px; text-align: center; border: 1px solid #ddd; }
+        .detail-label { color: #666; font-size: 0.55rem; display: block; }
+        .detail-val { font-weight: bold; color: var(--primary); font-size: 0.75rem; }
+
+        .result-box { margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; text-align: center; }
+        .result-item { padding: 10px; border-radius: 10px; color: white; }
+        .item-ct { background: #34495e; }
+        .item-2nd { background: #2980b9; }
+        .item-total { background: var(--primary); grid-column: span 3; }
+        .big-num { font-size: 1.4rem; font-weight: bold; display: block; color: #ffcc00; }
+        .diff-msg { font-size: 1.1rem; font-weight: bold; margin-top: 5px; border-top: 1px solid rgba(255,255,255,0.3); padding-top: 5px; }
+
+        @media (max-width: 768px) { .selection-area, .flex-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>国公立大学 総合判定シミュレーター</h1>
+
+    <div class="selection-area">
+        <div><label>① 大学を選択（難易度順）</label><select id="univ" onchange="updatePatterns()"></select></div>
+        <div><label>② 学部・方式</label><select id="pattern" onchange="createSecondInputs()"></select></div>
+    </div>
+
+    <div class="flex-grid">
+        <div class="card">
+            <div class="card-title">共通テスト 素点入力</div>
+            <div class="score-inputs">
+                <div><label>国語(200)</label><input type="number" id="jpn" value="160" data-max="200" oninput="calc()"></div>
+                <div><label>英語(200)</label><input type="number" id="eng" value="160" data-max="200" oninput="calc()"></div>
+                <div><label>数学(200)</label><input type="number" id="math" value="160" data-max="200" oninput="calc()"></div>
+                <div><label id="l-soc">地歴(---)</label><input type="number" id="soc" value="160" data-max="200" oninput="calc()"></div>
+                <div><label id="l-sci">理科(---)</label><input type="number" id="sci" value="80" data-max="200" oninput="calc()"></div>
+                <div><label>情報(100)</label><input type="number" id="info" value="80" data-max="100" oninput="calc()"></div>
+            </div>
+            <div class="detail-grid" id="detailGrid"></div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">二次試験・個別入力</div>
+            <div id="secondInputsArea" class="second-inputs"></div>
+        </div>
+    </div>
+
+    <div class="result-box">
+        <div class="result-item item-ct"><span>共テ(圧縮)</span><span class="big-num" id="resCT">0</span></div>
+        <div class="result-item item-2nd"><span>二次合計</span><span class="big-num" id="res2nd">0</span></div>
+        <div class="result-item item-total">
+            <span>総合得点</span><span class="big-num" id="resTotal">0</span>
+            <div id="judgment" class="diff-msg">--</div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 難易度順に並べたデータベース
+const db = {
+    "東京大学": {
+        "文科一類/二類/三類": { type:"文系", ct:{j:22,e:22,m:22,s:22,sc:11,i:11,f:110}, second:{国語:120, 数学:80, 外国語:120, 地歴:120}, border:355 },
+        "理科一類/二類": { type:"理系", ct:{j:22,e:22,m:22,s:11,sc:22,i:11,f:110}, second:{数学:120, 理科:120, 外国語:120, 国語:80}, border:340 },
+        "理科三類": { type:"理系", ct:{j:22,e:22,m:22,s:11,sc:22,i:11,f:110}, second:{数学:120, 理科:120, 外国語:120, 国語:80}, border:395 }
+    },
+    "京都大学": {
+        "文/法/経済": { type:"文系", ct:{j:50,e:50,m:50,s:50,sc:0,i:50,f:250}, second:{国語:150, 数学:150, 英語:150, 地歴:100}, border:510 },
+        "理/工/農": { type:"理系", ct:{j:50,e:50,m:0,s:0,sc:50,i:50,f:200}, second:{数学:200, 理科:200, 英語:200, 国語:100}, border:590 },
+        "医学部(医)": { type:"理系", ct:{j:50,e:50,m:0,s:0,sc:50,i:50,f:250}, second:{数学:250, 理科:300, 英語:300, 国語:150}, border:810 }
+    },
+    "一橋大学": { 
+        "全学部(商/経済/法/社)": { type:"文系", ct:{j:50,e:50,m:50,s:50,sc:25,i:25,f:250}, second:{国語:120, 数学:160, 英語:280, 地歴:160}, border:615 }
+    },
+    "東京科学大学": {
+        "理工学院(旧東工大)": { type:"理系", ct:{j:0,e:0,m:0,s:0,sc:0,i:0,f:0}, second:{数学:300, 英語:150, 物理:150, 化学:150}, border:465 },
+        "医学部(医)": { type:"理系", ct:{j:40,e:40,m:40,s:20,sc:40,i:0,f:180}, second:{数学:120, 理科:120, 英語:120}, border:385 }
+    },
+    "大阪大学": {
+        "文/法/経済": { type:"文系", ct:{j:150,e:150,m:150,s:100,sc:50,i:0,f:600}, second:{国語:150, 数学:150, 英語:200}, border:795 },
+        "理/工/基礎工": { type:"理系", ct:{j:100,e:100,m:100,s:50,sc:100,i:50,f:500}, second:{数学:250, 理科:250, 英語:200}, border:650 }
+    },
+    "神戸大学": {
+        "文/法/経済/国際": { type:"文系", ct:{j:80,e:80,m:80,s:80,sc:40,i:40,f:400}, second:{国語:150, 数学:125, 英語:125}, border:535 },
+        "理/工/農": { type:"理系", ct:{j:60,e:60,m:60,s:30,sc:120,i:30,f:360}, second:{数学:150, 理科:150, 英語:100}, border:515 }
+    },
+    "筑波大学": {
+        "人文・社会": { type:"文系", ct:{j:100,e:100,m:100,s:100,sc:50,i:50,f:500}, second:{英語:200, 国語:200, 地歴:100}, border:690 },
+        "理工/情報": { type:"理系", ct:{j:100,e:100,m:100,s:50,sc:100,i:50,f:500}, second:{数学:200, 理科:200, 英語:100}, border:665 }
+    },
+    "大阪公立大学": {
+        "文学部/法学部": { type:"文系", ct:{j:150,e:150,m:100,s:100,sc:50,i:50,f:600}, second:{国語:200, 英語:200}, border:670 },
+        "経済/商/現シス": { type:"文系", ct:{j:150,e:150,m:100,s:100,sc:50,i:50,f:600}, second:{数学:200, 英語:200}, border:685 },
+        "理/工/農/獣医": { type:"理系", ct:{j:100,e:100,m:100,s:50,sc:100,i:50,f:500}, second:{数学:300, 理科:300, 英語:200}, border:780 },
+        "医学部(医)": { type:"理系", ct:{j:100,e:100,m:100,s:50,sc:200,i:100,f:650}, second:{数学:400, 理科:400, 英語:400}, border:1560 },
+        "看護/生活科学": { type:"理系", ct:{j:150,e:150,m:100,s:100,sc:100,i:50,f:650}, second:{英語:200, 国語:200}, border:710 }
+    },
+    "広島大学": {
+        "文/法/経済": { type:"文系", ct:{j:200,e:200,m:200,s:200,sc:100,i:0,f:900}, second:{国語:200, 英語:200}, border:880 },
+        "理/工": { type:"理系", ct:{j:100,e:100,m:200,s:100,sc:200,i:100,f:800}, second:{数学:400, 理科:400, 英語:400}, border:1280 }
+    },
+    "岡山大学": {
+        "文/法/経済": { type:"文系", ct:{j:200,e:200,m:200,s:200,sc:100,i:100,f:1000}, second:{国語:200, 英語:200}, border:950 },
+        "理/工/農": { type:"理系", ct:{j:100,e:100,m:100,s:100,sc:200,i:100,f:700}, second:{数学:200, 理科:200, 英語:200}, border:860 }
+    },
+    "兵庫県立大学": {
+        "商経学部": { type:"文系", ct:{j:200,e:200,m:200,s:100,sc:100,i:100,f:900}, second:{数学:300}, border:780 },
+        "工学部": { type:"理系", ct:{j:100,e:100,m:200,s:50,sc:200,i:50,f:700}, second:{数学:150, 理科:150}, border:640 },
+        "環境人間学部": { type:"文系", ct:{j:200,e:200,m:100,s:100,sc:100,i:100,f:800}, second:{小論文:200}, border:620 },
+        "理学部": { type:"理系", ct:{j:100,e:100,m:100,s:50,sc:200,i:50,f:600}, second:{数学:300, 理科:300}, border:680 },
+        "看護学部": { type:"理系", ct:{j:200,e:200,m:100,s:100,sc:100,i:50,f:750}, second:{小論文:150, 面接:150}, border:610 }
+    },
+    "和歌山大学": {
+        "観光/経済": { type:"文系", ct:{j:200,e:200,m:200,s:100,sc:100,i:100,f:900}, second:{数学:200}, border:795 },
+        "システム工": { type:"理系", ct:{j:100,e:200,m:200,s:50,sc:200,i:50,f:800}, second:{数学:200, 理科:200}, border:735 }
+    },
+    "徳島大学": { "総合科学/理工": { type:"理系", ct:{j:100,e:200,m:200,s:100,sc:200,i:100,f:900}, second:{数学:200, 理科:200}, border:790 } },
+    "香川大学": { "文/法/経/工": { type:"理系", ct:{j:100,e:100,m:200,s:100,sc:200,i:100,f:800}, second:{数学:200, 理科:200}, border:780 } },
+    "滋賀県立大学": { "全学部": { type:"理系", ct:{j:100,e:100,m:200,s:50,sc:200,i:50,f:700}, second:{数学:200, 理科:200}, border:745 } },
+    "岡山県立大学": { "全学部": { type:"理系", ct:{j:100,e:100,m:200,s:50,sc:100,i:50,f:600}, second:{数学:200, 英語:100}, border:620 } },
+    "島根大学": { "法文/理工": { type:"理系", ct:{j:100,e:100,m:200,s:100,sc:200,i:100,f:800}, second:{数学:200, 理科:200}, border:720 } },
+    "鳥取大学": { "地域/工/農": { type:"理系", ct:{j:200,e:200,m:200,s:100,sc:200,i:100,f:1000}, second:{数学:250, 英語:250}, border:870 } }
+};
+
+const uSel = document.getElementById('univ');
+const pSel = document.getElementById('pattern');
+
+function init() {
+    uSel.innerHTML = "";
+    // dbのキーの順序をそのまま保持して追加
+    Object.keys(db).forEach(name => uSel.add(new Option(name, name)));
+    updatePatterns();
+}
+
+function updatePatterns() {
+    pSel.innerHTML = "";
+    const univData = db[uSel.value];
+    for (let pName in univData) pSel.add(new Option(pName, pName));
+    createSecondInputs();
+}
+
+function createSecondInputs() {
+    const area = document.getElementById('secondInputsArea');
+    area.innerHTML = "";
+    const data = db[uSel.value][pSel.value];
+    for (let subject in data.second) {
+        const full = data.second[subject];
+        const row = document.createElement('div');
+        row.className = 'second-row';
+        row.innerHTML = `<label>${subject}(${full})</label><input type="number" class="second-val" data-max="${full}" value="${Math.round(full*0.6)}" oninput="calc()">`;
+        area.appendChild(row);
+    }
+    calc();
+}
+
+function calc() {
+    const d = db[uSel.value][pSel.value];
+    const socF = (d.type === "文系") ? 200 : 100;
+    const sciF = (d.type === "理系") ? 200 : 100;
+    
+    document.getElementById('l-soc').innerText = `地歴(${socF})`;
+    document.getElementById('l-sci').innerText = `理科(${sciF})`;
+    document.getElementById('soc').dataset.max = socF;
+    document.getElementById('sci').dataset.max = sciF;
+
+    document.querySelectorAll('input[type="number"]').forEach(input => {
+        const val = Number(input.value);
+        const max = Number(input.dataset.max);
+        if (val > max || val < 0) input.classList.add('input-error');
+        else input.classList.remove('input-error');
+    });
+
+    const s = {
+        j: Number(document.getElementById('jpn').value)||0, e: Number(document.getElementById('eng').value)||0,
+        m: Number(document.getElementById('math').value)||0, s: Number(document.getElementById('soc').value)||0,
+        sc: Number(document.getElementById('sci').value)||0, i: Number(document.getElementById('info').value)||0
+    };
+
+    const c = {
+        j: (s.j/200*d.ct.j), e: (s.e/200*d.ct.e), m: (s.m/200*d.ct.m),
+        s: (s.s/socF*d.ct.s), sc: (s.sc/sciF*d.ct.sc), i: (s.i/100*d.ct.i)
+    };
+
+    const detailGrid = document.getElementById('detailGrid');
+    detailGrid.innerHTML = "";
+    const subjects = { "国語": c.j, "英語": c.e, "数学": c.m, "地歴": c.s, "理科": c.sc, "情報": c.i };
+    for (let key in subjects) {
+        detailGrid.innerHTML += `<div class="detail-item"><span class="detail-label">${key}</span><span class="detail-val">${Math.round(subjects[key]*10)/10}</span></div>`;
+    }
+
+    const ctTotal = Object.values(c).reduce((a, b) => a + b, 0);
+    let secTotal = 0;
+    let secFull = 0;
+    document.querySelectorAll('.second-val').forEach(input => {
+        secTotal += Number(input.value) || 0;
+        secFull += Number(input.dataset.max) || 0;
+    });
+
+    const final = Math.round((ctTotal + secTotal) * 10) / 10;
+    document.getElementById('resCT').innerText = `${Math.round(ctTotal * 10) / 10}/${d.ct.f}`;
+    document.getElementById('res2nd').innerText = `${secTotal}/${secFull}`;
+    document.getElementById('resTotal').innerText = `${final}/${d.ct.f + secFull}`;
+
+    const diff = Math.round((final - d.border) * 10) / 10;
+    const jBox = document.getElementById('judgment');
+    jBox.innerText = `目安まで: ${diff >= 0 ? "+" + diff : diff}点`;
+    jBox.style.color = diff >= 0 ? "#2ecc71" : "#ffeb3b";
+}
+
+window.onload = init;
+</script>
+</body>
+</html>
